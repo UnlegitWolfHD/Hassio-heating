@@ -90,7 +90,8 @@ class EcoThermostatEntity(ClimateEntity):
             "preset_mode": self.control.preset_mode,
             "available_presets": list(self.control.presets.keys()),
             "current_humidity": self.sensors.current_hum,
-            "override_thermostat": self.override.override_thermostat,
+            "override_climate": getattr(self.override, "override_climate", None),
+            "override_entity": getattr(self.override, "override_entity", None),
         }
 
     # ---------------- Climate API ----------------
