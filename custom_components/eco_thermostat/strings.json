@@ -1,0 +1,23 @@
+{
+  "title": "Eco Thermostat",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Eco Thermostat einrichten",
+        "description": "Wähle Heizgerät, optional Kühlgerät, Raumtemperatursensor, Fensterkontakte und Offset."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Steuerungsoptionen",
+        "description": "Hysterese, Anti-Short-Cycling, Fensterverhalten, Frost, Glättung (EMA)."
+      },
+      "presets": {
+        "title": "Preset-Temperaturen",
+        "description": "Temperaturen für Eco/Komfort/Schlaf/Abwesend festlegen."
+      }
+    }
+  }
+}
