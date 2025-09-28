@@ -42,7 +42,9 @@ class EcoThermostatEntity(ClimateEntity):
         }
 
         self._attr_hvac_modes = self.control.supported_modes(self._cooler)
-        self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
+        self._attr_supported_features = (
+            ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
+        )
         self._attr_preset_modes = list(self.control.presets.keys())
 
     # ---------------- Climate Properties ----------------
@@ -63,8 +65,33 @@ class EcoThermostatEntity(ClimateEntity):
         return self.control.target_temp
 
     @property
+    def preset_modes(self):
+        return list(self.control.presets.keys())
+
+    @property
     def preset_mode(self) -> str:
         return self.control.preset_mode
+
+    @property
+    def hvac_action(self):
+        """Zeigt an: heating / cooling / idle"""
+        ct = self.sensors.current_temp
+        if ct is None:
+            return None
+        if self.control.hvac_mode == HVACMode.HEAT and ct < self.control.target_temp - self.control.deadband:
+            return "heating"
+        if self.control.hvac_mode == HVACMode.COOL and ct > self.control.target_temp + self.control.deadband:
+            return "cooling"
+        return "idle"
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "preset_mode": self.control.preset_mode,
+            "available_presets": list(self.control.presets.keys()),
+            "current_humidity": self.sensors.current_hum,
+            "override_thermostat": self.override.override_thermostat,
+        }
 
     # ---------------- Climate API ----------------
     async def async_set_temperature(self, **kwargs: Any) -> None:
