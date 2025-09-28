@@ -11,14 +11,16 @@ from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import HVACMode, ClimateEntityFeature
 
 from .const import (
-    CONF_NAME, CONF_HEATER, CONF_COOLER, CONF_SENSOR, CONF_TEMP_OFFSET, CONF_WINDOWS,
+    CONF_NAME, CONF_HEATER, CONF_COOLER,
+    CONF_SENSOR_TEMP, CONF_SENSOR_HUM, CONF_OVERRIDE_THERMOSTAT,
+    CONF_TEMP_OFFSET, CONF_WINDOWS,
     CONF_DEADBAND, CONF_MIN_RUN_SECONDS, CONF_MIN_IDLE_SECONDS, CONF_WINDOW_MODE,
     CONF_FROST_TEMP, CONF_SMOOTHING_ALPHA, CONF_PRESETS, DEFAULT_PRESETS, DOMAIN
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-UPDATE_INTERVAL = 30.0  # seconds
+UPDATE_INTERVAL = 30.0  # Sekunden
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     entity = EcoThermostatEntity(hass, entry)
@@ -32,17 +34,20 @@ class EcoThermostatEntity(ClimateEntity):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry):
         self.hass = hass
         self.entry = entry
-
         data = entry.data
 
         self._name: str = data[CONF_NAME]
         self._heater: str = data[CONF_HEATER]
         self._cooler: Optional[str] = data.get(CONF_COOLER)
-        self._sensor: str = data[CONF_SENSOR]
+
+        self._sensor_temp: str = data[CONF_SENSOR_TEMP]
+        self._sensor_hum: Optional[str] = data.get(CONF_SENSOR_HUM)
+        self._override_thermostat: Optional[str] = data.get(CONF_OVERRIDE_THERMOSTAT)
+
         self._windows: List[str] = data.get(CONF_WINDOWS, [])
         self._offset: float = float(data.get(CONF_TEMP_OFFSET, 0.0))
 
-        # Options
+        # Optionen
         opts = entry.options or {}
         self._deadband: float = float(opts.get(CONF_DEADBAND, 0.4))
         self._min_run: int = int(opts.get(CONF_MIN_RUN_SECONDS, 180))
@@ -52,13 +57,26 @@ class EcoThermostatEntity(ClimateEntity):
         self._alpha: float = float(opts.get(CONF_SMOOTHING_ALPHA, 0.0))
         self._presets = opts.get(CONF_PRESETS, DEFAULT_PRESETS)
 
-        # State
+        # Entity-Infos
         self._attr_name = self._name
-        self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT] + ([HVACMode.COOL, HVACMode.AUTO] if self._cooler else [])
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry.entry_id)},
+            "name": self._name,
+            "manufacturer": "Eco Thermostat",
+            "model": "Virtual Climate",
+            "sw_version": "4.0.0",
+        }
+
+        self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT] + (
+            [HVACMode.COOL, HVACMode.AUTO] if self._cooler else []
+        )
         self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
         self._attr_preset_modes = list(self._presets.keys())
 
+        # State
         self._current_temp: Optional[float] = None
+        self._current_humidity: Optional[float] = None
         self._smoothed_temp: Optional[float] = None
         self._attr_target_temperature: float = float(self._presets.get("comfort", 22.0))
         self._attr_hvac_mode: HVACMode = HVACMode.HEAT
@@ -66,26 +84,23 @@ class EcoThermostatEntity(ClimateEntity):
 
         self._last_state_change_ts: float = 0.0
         self._last_command_ts: float = 0.0
-        self._saved_before_window = None  # (hvac_mode, target)
+        self._saved_before_window = None
 
         self._unsub_sensor = None
         self._unsub_windows = []
         self._unsub_timer = None
 
+    # ---------- Lifecycle ----------
     async def async_added_to_hass(self) -> None:
-        # subscribe sensor updates
         self._unsub_sensor = async_track_state_change_event(
-            self.hass, [self._sensor], self._handle_sensor_change
+            self.hass, [self._sensor_temp], self._handle_sensor_change
         )
-        # subscribe window contacts
         if self._windows:
             self._unsub_windows = [
                 async_track_state_change_event(self.hass, [w], self._handle_window_change)
                 for w in self._windows
             ]
-        # periodic re-eval
         self._schedule_tick()
-        # set initial current temp
         self._refresh_temperature()
         self.async_write_ha_state()
 
@@ -97,13 +112,17 @@ class EcoThermostatEntity(ClimateEntity):
         if self._unsub_timer:
             self._unsub_timer()
 
+    # ---------- Properties ----------
     @property
     def current_temperature(self) -> Optional[float]:
         return self._smoothed_temp if self._alpha and self._smoothed_temp is not None else self._current_temp
 
     @property
+    def current_humidity(self) -> Optional[float]:
+        return self._current_humidity
+
+    @property
     def hvac_action(self):
-        # Optional: indicate action (heating/cooling/idle)
         if self._attr_hvac_mode == HVACMode.OFF:
             return None
         ct = self.current_temperature
@@ -115,7 +134,7 @@ class EcoThermostatEntity(ClimateEntity):
             return "cooling"
         return "idle"
 
-    # Handlers
+    # ---------- Event Handling ----------
     def _schedule_tick(self):
         self._unsub_timer = async_call_later(self.hass, UPDATE_INTERVAL, self._on_tick)
 
@@ -136,23 +155,47 @@ class EcoThermostatEntity(ClimateEntity):
         self._evaluate_control(force=True)
         self.async_write_ha_state()
 
+    # ---------- Sensor Refresh ----------
     def _refresh_temperature(self):
-        st = self.hass.states.get(self._sensor)
-        if not st:
-            return
-        try:
-            raw = float(st.state)
-        except (ValueError, TypeError):
-            return
-        val = raw + self._offset
-        if self._alpha and self._alpha > 0.0 and self._alpha <= 1.0:
-            if self._smoothed_temp is None:
-                self._smoothed_temp = val
-            else:
-                self._smoothed_temp = self._alpha * val + (1.0 - self._alpha) * self._smoothed_temp
-        self._current_temp = val
+        # Temperatur
+        st = self.hass.states.get(self._sensor_temp)
+        if st:
+            try:
+                raw = float(st.state)
+                val = raw + self._offset
+                if self._alpha and 0.0 < self._alpha <= 1.0:
+                    if self._smoothed_temp is None:
+                        self._smoothed_temp = val
+                    else:
+                        self._smoothed_temp = self._alpha * val + (1.0 - self._alpha) * self._smoothed_temp
+                self._current_temp = val
 
-    # Climate API
+                # Override schreiben
+                if self._override_thermostat:
+                    self.hass.async_create_task(
+                        self.hass.services.async_call(
+                            "climate",
+                            "set_temperature",
+                            {
+                                "entity_id": self._override_thermostat,
+                                "temperature": self._attr_target_temperature
+                            },
+                            blocking=False
+                        )
+                    )
+            except (ValueError, TypeError):
+                pass
+
+        # Luftfeuchtigkeit
+        if self._sensor_hum:
+            st_h = self.hass.states.get(self._sensor_hum)
+            if st_h:
+                try:
+                    self._current_humidity = float(st_h.state)
+                except (ValueError, TypeError):
+                    self._current_humidity = None
+
+    # ---------- Climate API ----------
     async def async_set_temperature(self, **kwargs: Any) -> None:
         if (t := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
@@ -173,7 +216,7 @@ class EcoThermostatEntity(ClimateEntity):
         await self._apply_target()
         self.async_write_ha_state()
 
-    # Control logic
+    # ---------- Control Logic ----------
     def _window_open(self) -> bool:
         for w in self._windows:
             st = self.hass.states.get(w)
@@ -194,7 +237,7 @@ class EcoThermostatEntity(ClimateEntity):
         if ct is None:
             return
 
-        # Window logic
+        # Fensterlogik
         if self._window_open():
             if self._saved_before_window is None:
                 self._saved_before_window = (self._attr_hvac_mode, self._attr_target_temperature)
@@ -212,7 +255,7 @@ class EcoThermostatEntity(ClimateEntity):
                 self._attr_hvac_mode = prev_mode
                 self._attr_target_temperature = prev_target
 
-        # AUTO decision if cooler available
+        # AUTO-Modus
         if self._attr_hvac_mode == HVACMode.AUTO and self._cooler:
             next_mode = None
             if ct < self._attr_target_temperature - self._deadband:
@@ -226,23 +269,17 @@ class EcoThermostatEntity(ClimateEntity):
                 self.hass.async_create_task(self._apply_target(push_immediately=True))
             return
 
-        # In explicit HEAT/COOL: just push (respect min times)
+        # Explizit HEAT/COOL
         if self._attr_hvac_mode in (HVACMode.HEAT, HVACMode.COOL):
             if not (force or self._respect_min_times()):
                 return
             self.hass.async_create_task(self._apply_target(push_immediately=True))
 
     async def _apply_target(self, push_immediately: bool = False):
-        """Synchronisiere Ziel und Modus mit realen Geräten, basierend auf externem Sensor."""
         now = time.time()
         if not push_immediately and (now - self._last_command_ts) < 1.0:
             return
 
-        ct = self.current_temperature
-        if ct is None:
-            return
-
-        # Geräte ausschalten, wenn Modus OFF
         if self._attr_hvac_mode == HVACMode.OFF:
             if self._heater:
                 await self.hass.services.async_call(
@@ -259,10 +296,8 @@ class EcoThermostatEntity(ClimateEntity):
             self._last_command_ts = now
             return
 
-        # --- HEAT ---
         if self._attr_hvac_mode == HVACMode.HEAT and self._heater:
-            if ct < self._attr_target_temperature - self._deadband:
-                # Heizen einschalten
+            if self.current_temperature is not None and self.current_temperature < self._attr_target_temperature - self._deadband:
                 await self.hass.services.async_call(
                     "climate", "set_hvac_mode",
                     {"entity_id": self._heater, "hvac_mode": HVACMode.HEAT},
@@ -274,17 +309,20 @@ class EcoThermostatEntity(ClimateEntity):
                     blocking=False
                 )
             else:
-                # Heizung aus
                 await self.hass.services.async_call(
                     "climate", "set_hvac_mode",
                     {"entity_id": self._heater, "hvac_mode": HVACMode.OFF},
                     blocking=False
                 )
+            if self._cooler:
+                await self.hass.services.async_call(
+                    "climate", "set_hvac_mode",
+                    {"entity_id": self._cooler, "hvac_mode": HVACMode.OFF},
+                    blocking=False
+                )
 
-        # --- COOL ---
         if self._attr_hvac_mode == HVACMode.COOL and self._cooler:
-            if ct > self._attr_target_temperature + self._deadband:
-                # Kühlen einschalten
+            if self.current_temperature is not None and self.current_temperature > self._attr_target_temperature + self._deadband:
                 await self.hass.services.async_call(
                     "climate", "set_hvac_mode",
                     {"entity_id": self._cooler, "hvac_mode": HVACMode.COOL},
@@ -296,25 +334,16 @@ class EcoThermostatEntity(ClimateEntity):
                     blocking=False
                 )
             else:
-                # Klima aus
                 await self.hass.services.async_call(
                     "climate", "set_hvac_mode",
                     {"entity_id": self._cooler, "hvac_mode": HVACMode.OFF},
                     blocking=False
                 )
+            if self._heater:
+                await self.hass.services.async_call(
+                    "climate", "set_hvac_mode",
+                    {"entity_id": self._heater, "hvac_mode": HVACMode.OFF},
+                    blocking=False
+                )
 
         self._last_command_ts = now
-
-    @property
-    def unique_id(self) -> str:
-        return f"{DOMAIN}_{self.entry.entry_id}"
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        return {
-            "identifiers": {(DOMAIN, self.entry.entry_id)},
-            "name": self._name,
-            "manufacturer": "Eco Thermostat",
-            "model": "Virtual Climate",
-            "sw_version": "3.0.0",
-        }

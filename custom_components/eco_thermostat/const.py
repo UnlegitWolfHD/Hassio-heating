@@ -6,11 +6,16 @@ DOMAIN = "eco_thermostat"
 CONF_NAME = "name"
 CONF_HEATER = "heater"
 CONF_COOLER = "cooler"
-CONF_SENSOR = "sensor"
+
+# neue Keys
+CONF_SENSOR_TEMP = "sensor_temp"
+CONF_SENSOR_HUM = "sensor_humidity"
+CONF_OVERRIDE_THERMOSTAT = "override_thermostat"
+
 CONF_TEMP_OFFSET = "temp_offset"
 CONF_WINDOWS = "windows"
 
-# Options (modifiable via OptionsFlow)
+# Options
 CONF_DEADBAND = "deadband"
 CONF_MIN_RUN_SECONDS = "min_run_seconds"
 CONF_MIN_IDLE_SECONDS = "min_idle_seconds"
@@ -27,11 +32,11 @@ DEFAULT_PRESETS = {
 }
 
 DEFAULT_OPTIONS = {
-    CONF_DEADBAND: 0.4,           # °C Hysterese
-    CONF_MIN_RUN_SECONDS: 180,    # min. Laufzeit bevor umgeschaltet wird
-    CONF_MIN_IDLE_SECONDS: 180,   # min. Stillstand bevor wieder gestartet wird
+    CONF_DEADBAND: 0.4,
+    CONF_MIN_RUN_SECONDS: 180,
+    CONF_MIN_IDLE_SECONDS: 180,
     CONF_WINDOW_MODE: "frost",
     CONF_FROST_TEMP: 5.0,
-    CONF_SMOOTHING_ALPHA: 0.0,    # 0 = keine Glättung
+    CONF_SMOOTHING_ALPHA: 0.0,
     CONF_PRESETS: DEFAULT_PRESETS,
 }
