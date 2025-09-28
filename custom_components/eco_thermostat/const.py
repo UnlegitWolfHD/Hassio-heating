@@ -11,6 +11,7 @@ CONF_COOLER = "cooler"
 CONF_SENSOR_TEMP = "sensor_temp"
 CONF_SENSOR_HUM = "sensor_humidity"
 CONF_OVERRIDE_THERMOSTAT = "override_thermostat"
+CONF_OVERRIDE_ENTITY = "override_entity"
 
 CONF_TEMP_OFFSET = "temp_offset"
 CONF_WINDOWS = "windows"

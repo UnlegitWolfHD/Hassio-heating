@@ -38,6 +38,9 @@ class EcoThermostatConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_OVERRIDE_THERMOSTAT): selector.selector({
                     "entity": {"domain": "climate"}
                 }),
+                vol.Optional("override_entity"): selector.selector({
+                    "entity": {"domain": ["number", "input_number", "select"]}
+                }),
 
                 vol.Optional(CONF_TEMP_OFFSET, default=0.0): vol.Coerce(float),
                 vol.Optional(CONF_WINDOWS, default=[]): selector.selector({
