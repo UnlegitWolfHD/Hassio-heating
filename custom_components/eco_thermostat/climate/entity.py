@@ -11,8 +11,9 @@ from .override import OverrideHandler
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class EcoThermostatEntity(ClimateEntity):
-    _attr_should_poll = False
+    _attr_should_poll = True
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
 
     def __init__(self, hass, entry):
@@ -44,7 +45,7 @@ class EcoThermostatEntity(ClimateEntity):
         self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
         self._attr_preset_modes = list(self.control.presets.keys())
 
-    # Climate Properties
+    # ---------------- Climate Properties ----------------
     @property
     def current_temperature(self) -> Optional[float]:
         return self.sensors.current_temp
@@ -65,21 +66,26 @@ class EcoThermostatEntity(ClimateEntity):
     def preset_mode(self) -> str:
         return self.control.preset_mode
 
-    # Climate API
+    # ---------------- Climate API ----------------
     async def async_set_temperature(self, **kwargs: Any) -> None:
         if (t := kwargs.get(ATTR_TEMPERATURE)) is not None:
             await self.control.set_target(t)
+            await self.override.apply(self.control, self.sensors)
             self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         await self.control.set_mode(hvac_mode)
+        await self.override.apply(self.control, self.sensors)
         self.async_write_ha_state()
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         await self.control.set_preset(preset_mode)
+        await self.override.apply(self.control, self.sensors)
         self.async_write_ha_state()
 
-    async def async_update(self):
+    async def async_update(self) -> None:
+        """Haupt-Update-Zyklus"""
         await self.sensors.refresh()
         await self.control.evaluate(self.sensors)
         await self.override.apply(self.control, self.sensors)
+        self.async_write_ha_state()
