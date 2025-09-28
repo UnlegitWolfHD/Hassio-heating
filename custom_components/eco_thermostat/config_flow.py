@@ -28,7 +28,7 @@ class EcoThermostatConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_HEATER): selector.selector({"entity": {"domain": "climate"}}),
                 vol.Optional(CONF_COOLER): selector.selector({"entity": {"domain": "climate"}}),
 
-                # neu
+                # neue Auswahl
                 vol.Required(CONF_SENSOR_TEMP): selector.selector({
                     "entity": {"domain": "sensor", "device_class": "temperature"}
                 }),
