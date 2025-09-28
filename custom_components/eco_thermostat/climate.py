@@ -233,11 +233,16 @@ class EcoThermostatEntity(ClimateEntity):
             self.hass.async_create_task(self._apply_target(push_immediately=True))
 
     async def _apply_target(self, push_immediately: bool = False):
+        """Synchronisiere Ziel und Modus mit realen Geräten, basierend auf externem Sensor."""
         now = time.time()
         if not push_immediately and (now - self._last_command_ts) < 1.0:
             return
 
-        # OFF: power down both
+        ct = self.current_temperature
+        if ct is None:
+            return
+
+        # Geräte ausschalten, wenn Modus OFF
         if self._attr_hvac_mode == HVACMode.OFF:
             if self._heater:
                 await self.hass.services.async_call(
@@ -254,41 +259,47 @@ class EcoThermostatEntity(ClimateEntity):
             self._last_command_ts = now
             return
 
-        # HEAT
+        # --- HEAT ---
         if self._attr_hvac_mode == HVACMode.HEAT and self._heater:
-            await self.hass.services.async_call(
-                "climate", "set_temperature",
-                {"entity_id": self._heater, "temperature": float(self._attr_target_temperature)},
-                blocking=False
-            )
-            await self.hass.services.async_call(
-                "climate", "set_hvac_mode",
-                {"entity_id": self._heater, "hvac_mode": HVACMode.HEAT},
-                blocking=False
-            )
-            if self._cooler:
+            if ct < self._attr_target_temperature - self._deadband:
+                # Heizen einschalten
                 await self.hass.services.async_call(
                     "climate", "set_hvac_mode",
-                    {"entity_id": self._cooler, "hvac_mode": HVACMode.OFF},
+                    {"entity_id": self._heater, "hvac_mode": HVACMode.HEAT},
                     blocking=False
                 )
-
-        # COOL
-        if self._attr_hvac_mode == HVACMode.COOL and self._cooler:
-            await self.hass.services.async_call(
-                "climate", "set_temperature",
-                {"entity_id": self._cooler, "temperature": float(self._attr_target_temperature)},
-                blocking=False
-            )
-            await self.hass.services.async_call(
-                "climate", "set_hvac_mode",
-                {"entity_id": self._cooler, "hvac_mode": HVACMode.COOL},
-                blocking=False
-            )
-            if self._heater:
+                await self.hass.services.async_call(
+                    "climate", "set_temperature",
+                    {"entity_id": self._heater, "temperature": self._attr_target_temperature},
+                    blocking=False
+                )
+            else:
+                # Heizung aus
                 await self.hass.services.async_call(
                     "climate", "set_hvac_mode",
                     {"entity_id": self._heater, "hvac_mode": HVACMode.OFF},
+                    blocking=False
+                )
+
+        # --- COOL ---
+        if self._attr_hvac_mode == HVACMode.COOL and self._cooler:
+            if ct > self._attr_target_temperature + self._deadband:
+                # Kühlen einschalten
+                await self.hass.services.async_call(
+                    "climate", "set_hvac_mode",
+                    {"entity_id": self._cooler, "hvac_mode": HVACMode.COOL},
+                    blocking=False
+                )
+                await self.hass.services.async_call(
+                    "climate", "set_temperature",
+                    {"entity_id": self._cooler, "temperature": self._attr_target_temperature},
+                    blocking=False
+                )
+            else:
+                # Klima aus
+                await self.hass.services.async_call(
+                    "climate", "set_hvac_mode",
+                    {"entity_id": self._cooler, "hvac_mode": HVACMode.OFF},
                     blocking=False
                 )
 
