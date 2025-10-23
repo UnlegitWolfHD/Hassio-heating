@@ -4,7 +4,18 @@
     "step": {
       "user": {
         "title": "Eco Thermostat einrichten",
-        "description": "Wähle Heizgerät, optional Kühlgerät, Raumtemperatursensor, Fensterkontakte und Offset."
+        "description": "Wähle die Geräte und Sensoren aus, die dieses virtuelle Thermostat steuern soll. Optional kannst du Fensterkontakte und Overrides hinzufügen.",
+        "data": {
+          "name": "Name des Thermostats",
+          "heater": "Heizgerät",
+          "cooler": "Kühlgerät (optional)",
+          "sensor_temp": "Temperatursensor",
+          "sensor_humidity": "Feuchtigkeitssensor (optional)",
+          "temp_offset": "Temperatur-Offset (°C)",
+          "windows": "Fenstersensoren (optional)",
+          "override_thermostat": "Thermostat-Override (optional)",
+          "override_entity": "Override-Entity (z. B. number.* / input_number.*)"
+        }
       }
     }
   },
@@ -12,11 +23,48 @@
     "step": {
       "init": {
         "title": "Steuerungsoptionen",
-        "description": "Hysterese, Anti-Short-Cycling, Fensterverhalten, Frost, Glättung (EMA)."
+        "description": "Feinabstimmung der Regelung: Hysterese, Mindestlaufzeit, Frostverhalten und Glättung.",
+        "data": {
+          "deadband": "Hysterese (°C)",
+          "min_run_seconds": "Mindestlaufzeit (Sekunden)",
+          "min_idle_seconds": "Mindest-Leerlaufzeit (Sekunden)",
+          "window_mode": "Verhalten bei geöffnetem Fenster",
+          "frost_temp": "Frostschutz-Temperatur (°C)",
+          "smoothing_alpha": "Glättung (EMA α-Wert, 0=aus)"
+        }
       },
       "presets": {
         "title": "Preset-Temperaturen",
-        "description": "Temperaturen für Eco/Komfort/Schlaf/Abwesend festlegen."
+        "description": "Temperaturen für Eco-, Komfort-, Schlaf- und Abwesend-Modus festlegen.",
+        "data": {
+          "eco": "Eco-Modus (°C)",
+          "comfort": "Komfort-Modus (°C)",
+          "sleep": "Schlaf-Modus (°C)",
+          "away": "Abwesend (°C)"
+        }
+      }
+    }
+  },
+  "error": {
+    "heater_cooler_same": "Heiz- und Kühlgerät dürfen nicht identisch sein.",
+    "invalid_sensor": "Ungültiger Sensorwert oder nicht verfügbar.",
+    "missing_temp_sensor": "Es muss mindestens ein Temperatursensor ausgewählt werden."
+  },
+  "entity": {
+    "climate": {
+      "name": "Eco Thermostat",
+      "state": {
+        "off": "Aus",
+        "heating": "Heizen",
+        "cooling": "Kühlen",
+        "idle": "Leerlauf"
+      },
+      "attributes": {
+        "preset_mode": "Aktueller Preset-Modus",
+        "available_presets": "Verfügbare Presets",
+        "current_humidity": "Aktuelle Luftfeuchtigkeit",
+        "override_climate": "Override-Thermostat",
+        "override_entity": "Override-Entity"
       }
     }
   }
