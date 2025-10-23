@@ -1,7 +1,14 @@
 import logging
 from typing import Any, Optional
+
+from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.climate import ClimateEntity
-from homeassistant.components.climate.const import HVACMode, ClimateEntityFeature
+from homeassistant.components.climate.const import (
+    HVACMode,
+    HVACAction,
+    ClimateEntityFeature,
+)
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 
 from ..const import DOMAIN, CONF_NAME, CONF_HEATER, CONF_COOLER
@@ -13,24 +20,27 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class EcoThermostatEntity(ClimateEntity):
+    """Virtuelles Thermostat mit Eco-/Komfort-Logik."""
+
     _attr_should_poll = True
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
 
-    def __init__(self, hass, entry):
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
         self.entry = entry
         data = entry.data
 
-        self._name = data[CONF_NAME]
-        self._heater = data[CONF_HEATER]
-        self._cooler = data.get(CONF_COOLER)
+        # Basis-Infos
+        self._name: str = data[CONF_NAME]
+        self._heater: str = data[CONF_HEATER]
+        self._cooler: Optional[str] = data.get(CONF_COOLER)
 
-        # Manager
+        # Manager / Logik
         self.sensors = SensorManager(hass, data)
         self.control = ControlLogic(hass, entry, self._heater, self._cooler)
         self.override = OverrideHandler(hass, data)
 
-        # Entity Attribute
+        # Entity-Attribute
         self._attr_name = self._name
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}"
         self._attr_device_info = {
@@ -41,7 +51,7 @@ class EcoThermostatEntity(ClimateEntity):
             "sw_version": "4.0.0",
         }
 
-        self._attr_hvac_modes = self.control.supported_modes(self._cooler)
+        self._attr_hvac_modes = self.control.supported_modes()
         self._attr_supported_features = (
             ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
         )
@@ -65,34 +75,33 @@ class EcoThermostatEntity(ClimateEntity):
         return self.control.target_temp
 
     @property
-    def preset_modes(self):
-        return list(self.control.presets.keys())
-
-    @property
     def preset_mode(self) -> str:
         return self.control.preset_mode
 
     @property
-    def hvac_action(self):
-        """Zeigt an: heating / cooling / idle"""
+    def hvac_action(self) -> Optional[HVACAction]:
+        """Gibt den aktuellen Heiz/Kühl-Status zurück."""
         ct = self.sensors.current_temp
         if ct is None:
-            return None
+            return HVACAction.IDLE
+
         if self.control.hvac_mode == HVACMode.HEAT and ct < self.control.target_temp - self.control.deadband:
-            return "heating"
+            return HVACAction.HEATING
         if self.control.hvac_mode == HVACMode.COOL and ct > self.control.target_temp + self.control.deadband:
-            return "cooling"
-        return "idle"
+            return HVACAction.COOLING
+        return HVACAction.IDLE
 
     @property
-    def extra_state_attributes(self):
-        return {
+    def extra_state_attributes(self) -> dict[str, Any]:
+        attrs = {
             "preset_mode": self.control.preset_mode,
             "available_presets": list(self.control.presets.keys()),
             "current_humidity": self.sensors.current_hum,
             "override_climate": getattr(self.override, "override_climate", None),
             "override_entity": getattr(self.override, "override_entity", None),
         }
+        # Filtere None-Werte
+        return {k: v for k, v in attrs.items() if v is not None}
 
     # ---------------- Climate API ----------------
     async def async_set_temperature(self, **kwargs: Any) -> None:
@@ -112,8 +121,12 @@ class EcoThermostatEntity(ClimateEntity):
         self.async_write_ha_state()
 
     async def async_update(self) -> None:
-        """Haupt-Update-Zyklus"""
-        await self.sensors.refresh()
-        await self.control.evaluate(self.sensors)
-        await self.override.apply(self.control, self.sensors)
-        self.async_write_ha_state()
+        """Haupt-Update-Zyklus: Sensoren → Logik → Overrides."""
+        try:
+            await self.sensors.refresh()
+            await self.control.evaluate(self.sensors)
+            await self.override.apply(self.control, self.sensors)
+        except Exception as e:
+            _LOGGER.warning("Fehler im EcoThermostat-Update: %s", e)
+        finally:
+            self.async_write_ha_state()
