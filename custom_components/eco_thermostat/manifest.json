@@ -1,11 +1,11 @@
 {
   "domain": "eco_thermostat",
   "name": "Eco Thermostat",
-  "version": "3.0.0",
-  "documentation": "https://example.com/eco_thermostat",
+  "version": "5.0.0",
+  "documentation": "https://github.com/yourname/eco_thermostat",
   "requirements": [],
   "dependencies": [],
-  "codeowners": ["@you"],
-  "iot_class": "local_push",
-  "config_flow": true
+  "codeowners": ["@yourname"],
+  "config_flow": true,
+  "iot_class": "local_push"
 }
