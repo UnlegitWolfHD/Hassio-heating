@@ -12,7 +12,9 @@
           "sensor_temp": "Temperatursensor",
           "sensor_humidity": "Feuchtigkeitssensor (optional)",
           "temp_offset": "Temperatur-Offset",
-          "windows": "Fenstersensoren (optional)"
+          "windows": "Fenstersensoren (optional)",
+          "heater_offset_entity": "Heizung - Lokaler Temperatur-Offset Entity (optional)",
+          "cooler_offset_entity": "Kühlung - Lokaler Temperatur-Offset Entity (optional)"
         }
       }
     }
@@ -32,7 +34,8 @@
           "preset_eco": "Eco Temperatur",
           "preset_comfort": "Komfort Temperatur",
           "preset_sleep": "Schlaf Temperatur",
-          "preset_away": "Abwesend Temperatur"
+          "preset_away": "Abwesend Temperatur",
+          "auto_offset_update": "Automatische Offset-Anpassung aktivieren"
         }
       }
     }

@@ -17,9 +17,19 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
-from .const import DOMAIN, CONF_NAME, CONF_HEATER, CONF_COOLER
+from .const import (
+    DOMAIN,
+    CONF_NAME,
+    CONF_HEATER,
+    CONF_COOLER,
+    CONF_HEATER_OFFSET_ENTITY,
+    CONF_COOLER_OFFSET_ENTITY,
+    CONF_AUTO_OFFSET_UPDATE,
+    DEFAULT_AUTO_OFFSET_UPDATE,
+)
 from .sensors import SensorManager
 from .control import ControlLogic
+from .offset_manager import OffsetManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +58,9 @@ class EcoThermostatClimate(ClimateEntity):
 
     _attr_should_poll = True
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_target_temperature_step = 0.5
+    _attr_min_temp = 5.0
+    _attr_max_temp = 35.0
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the thermostat."""
@@ -59,6 +72,13 @@ class EcoThermostatClimate(ClimateEntity):
         # Entity attributes
         self._attr_name = data[CONF_NAME]
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry.entry_id)},
+            "name": data[CONF_NAME],
+            "manufacturer": "Eco Thermostat",
+            "model": "Virtual Thermostat",
+            "sw_version": "1.0.0",
+        }
 
         # Initialize components
         self.sensors = SensorManager(hass, data, options)
@@ -68,18 +88,30 @@ class EcoThermostatClimate(ClimateEntity):
             data[CONF_HEATER],
             data.get(CONF_COOLER),
         )
+        self.offset_manager = OffsetManager(
+            hass,
+            data[CONF_HEATER],
+            data.get(CONF_HEATER_OFFSET_ENTITY),
+            data.get(CONF_COOLER),
+            data.get(CONF_COOLER_OFFSET_ENTITY),
+            options.get(CONF_AUTO_OFFSET_UPDATE, DEFAULT_AUTO_OFFSET_UPDATE),
+        )
 
         # HVAC modes
         self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
         if data.get(CONF_COOLER):
             self._attr_hvac_modes.append(HVACMode.COOL)
+            self._attr_hvac_modes.append(HVACMode.HEAT_COOL)
 
         # Preset modes
         self._attr_preset_modes = [PRESET_ECO, PRESET_COMFORT, PRESET_SLEEP, PRESET_AWAY]
 
         # Supported features
         self._attr_supported_features = (
-            ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
+            ClimateEntityFeature.TARGET_TEMPERATURE |
+            ClimateEntityFeature.PRESET_MODE |
+            ClimateEntityFeature.TURN_ON |
+            ClimateEntityFeature.TURN_OFF
         )
 
         self._enable_turn_on_off_backwards_compatibility = False
@@ -140,6 +172,60 @@ class EcoThermostatClimate(ClimateEntity):
             await self.control.evaluate(self.sensors.current_temp)
             self.async_write_ha_state()
 
+    async def async_turn_on(self) -> None:
+        """Turn thermostat on (set to last used mode or heat)."""
+        if self.control.hvac_mode == HVACMode.OFF:
+            self.control.hvac_mode = HVACMode.HEAT
+            await self.control.evaluate(self.sensors.current_temp)
+            self.async_write_ha_state()
+
+    async def async_turn_off(self) -> None:
+        """Turn thermostat off."""
+        self.control.hvac_mode = HVACMode.OFF
+        await self.control.evaluate(self.sensors.current_temp)
+        self.async_write_ha_state()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        attrs = {
+            "deadband": self.control.deadband,
+            "min_run_seconds": self.control.min_run,
+            "min_idle_seconds": self.control.min_idle,
+            "window_mode": self.control.window_mode,
+            "frost_temp": self.control.frost_temp,
+            "auto_offset_update": self.offset_manager.auto_update_enabled,
+        }
+
+        if self.sensors.current_hum is not None:
+            attrs["current_humidity"] = self.sensors.current_hum
+
+        if self.control.windows:
+            attrs["window_open"] = self.control._is_window_open()
+
+        # Show offset entities if configured
+        if self.offset_manager.heater_offset_entity:
+            attrs["heater_offset_entity"] = self.offset_manager.heater_offset_entity
+            # Get current offset value
+            offset_state = self.hass.states.get(self.offset_manager.heater_offset_entity)
+            if offset_state:
+                try:
+                    attrs["heater_current_offset"] = float(offset_state.state)
+                except (ValueError, TypeError):
+                    pass
+
+        if self.offset_manager.cooler_offset_entity:
+            attrs["cooler_offset_entity"] = self.offset_manager.cooler_offset_entity
+            # Get current offset value
+            offset_state = self.hass.states.get(self.offset_manager.cooler_offset_entity)
+            if offset_state:
+                try:
+                    attrs["cooler_current_offset"] = float(offset_state.state)
+                except (ValueError, TypeError):
+                    pass
+
+        return attrs
+
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to hass."""
         await super().async_added_to_hass()
@@ -161,4 +247,8 @@ class EcoThermostatClimate(ClimateEntity):
         """Update the entity."""
         await self.sensors.update()
         await self.control.evaluate(self.sensors.current_temp)
+
+        # Update local temperature offsets if enabled
+        await self.offset_manager.update_offsets(self.sensors.current_temp)
+
         self.async_write_ha_state()

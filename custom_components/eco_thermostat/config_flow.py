@@ -12,12 +12,15 @@ from .const import (
     CONF_SENSOR_HUM,
     CONF_TEMP_OFFSET,
     CONF_WINDOWS,
+    CONF_HEATER_OFFSET_ENTITY,
+    CONF_COOLER_OFFSET_ENTITY,
     CONF_DEADBAND,
     CONF_MIN_RUN,
     CONF_MIN_IDLE,
     CONF_WINDOW_MODE,
     CONF_FROST_TEMP,
     CONF_SMOOTHING_ALPHA,
+    CONF_AUTO_OFFSET_UPDATE,
     CONF_PRESET_ECO,
     CONF_PRESET_COMFORT,
     CONF_PRESET_SLEEP,
@@ -30,6 +33,7 @@ from .const import (
     DEFAULT_FROST_TEMP,
     DEFAULT_SMOOTHING_ALPHA,
     DEFAULT_TEMP_OFFSET,
+    DEFAULT_AUTO_OFFSET_UPDATE,
     DEFAULT_PRESET_ECO,
     DEFAULT_PRESET_COMFORT,
     DEFAULT_PRESET_SLEEP,
@@ -60,6 +64,7 @@ class EcoThermostatConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_PRESET_COMFORT: DEFAULT_PRESET_COMFORT,
                     CONF_PRESET_SLEEP: DEFAULT_PRESET_SLEEP,
                     CONF_PRESET_AWAY: DEFAULT_PRESET_AWAY,
+                    CONF_AUTO_OFFSET_UPDATE: DEFAULT_AUTO_OFFSET_UPDATE,
                 },
             )
 
@@ -97,6 +102,16 @@ class EcoThermostatConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     selector.EntitySelectorConfig(
                         domain="binary_sensor",
                         multiple=True
+                    )
+                ),
+                vol.Optional(CONF_HEATER_OFFSET_ENTITY): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["number", "input_number"]
+                    )
+                ),
+                vol.Optional(CONF_COOLER_OFFSET_ENTITY): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["number", "input_number"]
                     )
                 ),
             }
@@ -242,6 +257,10 @@ class EcoThermostatOptionsFlow(config_entries.OptionsFlow):
                         unit_of_measurement="°C"
                     )
                 ),
+                vol.Optional(
+                    CONF_AUTO_OFFSET_UPDATE,
+                    default=options.get(CONF_AUTO_OFFSET_UPDATE, DEFAULT_AUTO_OFFSET_UPDATE)
+                ): selector.BooleanSelector(),
             }
         )
 
