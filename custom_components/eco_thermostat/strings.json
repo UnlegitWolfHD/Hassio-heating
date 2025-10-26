@@ -4,18 +4,15 @@
     "step": {
       "user": {
         "title": "Eco Thermostat einrichten",
-        "description": "Wähle Geräte, Sensoren und optional Fensterkontakte oder Overrides.",
+        "description": "Konfiguriere dein virtuelles Thermostat",
         "data": {
-          "name": "Name des Thermostats",
-          "heater": "Heizgerät",
-          "cooler": "Kühlgerät (optional)",
+          "name": "Name",
+          "heater": "Heizgerät (Climate Entity)",
+          "cooler": "Kühlgerät (Climate Entity, optional)",
           "sensor_temp": "Temperatursensor",
           "sensor_humidity": "Feuchtigkeitssensor (optional)",
-          "windows": "Fenstersensoren (optional)",
-          "override_thermostat": "Override-Thermostat (optional)",
-          "override_entity": "Override-Entity (z. B. number.* oder input_number.*)",
-          "override_mode": "Override-Modus",
-          "temp_offset": "Temperatur-Offset (°C)"
+          "temp_offset": "Temperatur-Offset",
+          "windows": "Fenstersensoren (optional)"
         }
       }
     }
@@ -23,15 +20,19 @@
   "options": {
     "step": {
       "init": {
-        "title": "Steuerungsoptionen",
-        "description": "Feinjustierung der Thermostatlogik.",
+        "title": "Optionen",
+        "description": "Passe die Thermostateinstellungen an",
         "data": {
-          "deadband": "Hysterese (°C)",
-          "min_run_seconds": "Mindestlaufzeit (s)",
-          "min_idle_seconds": "Mindest-Leerlaufzeit (s)",
+          "deadband": "Hysterese / Deadband",
+          "min_run_seconds": "Mindestlaufzeit",
+          "min_idle_seconds": "Mindest-Leerlaufzeit",
           "window_mode": "Fensterverhalten",
-          "frost_temp": "Frostschutztemperatur (°C)",
-          "smoothing_alpha": "Glättung (EMA α)"
+          "frost_temp": "Frostschutztemperatur",
+          "smoothing_alpha": "Temperaturglättung (EMA)",
+          "preset_eco": "Eco Temperatur",
+          "preset_comfort": "Komfort Temperatur",
+          "preset_sleep": "Schlaf Temperatur",
+          "preset_away": "Abwesend Temperatur"
         }
       }
     }
