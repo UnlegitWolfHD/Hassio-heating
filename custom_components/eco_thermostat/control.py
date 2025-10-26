@@ -1,7 +1,7 @@
 import time
 import logging
 from typing import Optional
-from homeassistant.components.climate.const import HVACMode
+from homeassistant.components.climate.const import HVACMode, HVACAction
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -16,10 +16,16 @@ class ControlLogic:
 
         opts = entry.options or {}
         data = entry.data or {}
-        self.presets = opts.get("presets", {})
+        self.presets = opts.get("presets", {
+            "comfort": 22.0,
+            "eco": 18.0,
+            "sleep": 19.0,
+            "away": 16.0
+        })
         self.target_temp = float(self.presets.get("comfort", 22))
         self.preset_mode = "comfort"
         self.hvac_mode = HVACMode.HEAT
+        self.hvac_action = HVACAction.IDLE
 
         self.deadband = float(opts.get("deadband", 0.4))
         self.frost_temp = float(opts.get("frost_temp", 5.0))
@@ -30,6 +36,8 @@ class ControlLogic:
         self._last_change = 0.0
         self._saved_before_window: Optional[tuple[HVACMode, float]] = None
         self._window_was_open = False
+        self._is_heating = False
+        self._is_cooling = False
 
     def _window_open(self) -> bool:
         for w in self.windows:
