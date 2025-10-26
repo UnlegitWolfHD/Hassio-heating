@@ -52,49 +52,58 @@ class EcoThermostatConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_NAME, default="Eco Thermostat"): str,
 
                 # Geräte
-                vol.Required(CONF_HEATER): selector.selector(
-                    {"entity": {"domain": "climate"}}
+                vol.Required(CONF_HEATER): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="climate")
                 ),
-                vol.Optional(CONF_COOLER): selector.selector(
-                    {"entity": {"domain": "climate"}}
+                vol.Optional(CONF_COOLER): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="climate")
                 ),
 
                 # Sensoren
-                vol.Required(CONF_SENSOR_TEMP): selector.selector({
-                    "entity": {"domain": "sensor", "device_class": "temperature"}
-                }),
-                vol.Optional(CONF_SENSOR_HUM): selector.selector({
-                    "entity": {"domain": "sensor", "device_class": "humidity"}
-                }),
+                vol.Required(CONF_SENSOR_TEMP): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+                ),
+                vol.Optional(CONF_SENSOR_HUM): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+                ),
 
                 # Fensterkontakte
-                vol.Optional(CONF_WINDOWS): selector.selector({
-                    "entity": {
-                        "domain": "binary_sensor",
-                        "device_class": ["opening", "window", "door"]
-                    },
-                    "multiple": True
-                }),
+                vol.Optional(CONF_WINDOWS): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="binary_sensor",
+                        device_class=["opening", "window", "door"],
+                        multiple=True
+                    )
+                ),
 
                 # Override-Einstellungen
-                vol.Optional(CONF_OVERRIDE_THERMOSTAT): selector.selector({
-                    "entity": {"domain": "climate"}
-                }),
-                vol.Optional(CONF_OVERRIDE_ENTITY): selector.selector({
-                    "entity": {"domain": ["number", "input_number", "select"]}
-                }),
-                vol.Optional(CONF_OVERRIDE_MODE, default="external_value"): selector.selector({
-                    "select": {
-                        "options": [
-                            {"label": "Externe Temperatur setzen", "value": "external_value"},
-                            {"label": "Offset berechnen (Raumtemp - lokale Temp)", "value": "offset_mode"},
-                            {"label": "Deaktiviert", "value": "disabled"}
-                        ]
-                    }
-                }),
+                vol.Optional(CONF_OVERRIDE_THERMOSTAT): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="climate")
+                ),
+                vol.Optional(CONF_OVERRIDE_ENTITY): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["number", "input_number"])
+                ),
+                vol.Optional(CONF_OVERRIDE_MODE, default="external_value"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(label="Externe Temperatur setzen", value="external_value"),
+                            selector.SelectOptionDict(label="Offset berechnen (Raumtemp - lokale Temp)", value="offset_mode"),
+                            selector.SelectOptionDict(label="Deaktiviert", value="disabled")
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN
+                    )
+                ),
 
                 # Temperatur-Offset
-                vol.Optional(CONF_TEMP_OFFSET, default=0.0): vol.Coerce(float),
+                vol.Optional(CONF_TEMP_OFFSET, default=0.0): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=-10.0,
+                        max=10.0,
+                        step=0.1,
+                        mode=selector.NumberSelectorMode.BOX,
+                        unit_of_measurement="°C"
+                    )
+                ),
             }
         )
 
@@ -122,18 +131,59 @@ class EcoThermostatOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=new_opts)
 
         schema = vol.Schema({
-            vol.Optional(CONF_DEADBAND, default=opts[CONF_DEADBAND]):
-                vol.All(vol.Coerce(float), vol.Range(min=0.1, max=2.0)),
-            vol.Optional(CONF_MIN_RUN_SECONDS, default=opts[CONF_MIN_RUN_SECONDS]):
-                vol.All(vol.Coerce(int), vol.Range(min=0, max=3600)),
-            vol.Optional(CONF_MIN_IDLE_SECONDS, default=opts[CONF_MIN_IDLE_SECONDS]):
-                vol.All(vol.Coerce(int), vol.Range(min=0, max=3600)),
-            vol.Optional(CONF_WINDOW_MODE, default=opts[CONF_WINDOW_MODE]):
-                vol.In(["off", "frost"]),
-            vol.Optional(CONF_FROST_TEMP, default=opts[CONF_FROST_TEMP]):
-                vol.All(vol.Coerce(float), vol.Range(min=3, max=12)),
-            vol.Optional(CONF_SMOOTHING_ALPHA, default=opts[CONF_SMOOTHING_ALPHA]):
-                vol.All(vol.Coerce(float), vol.Range(min=0.0, max=1.0)),
+            vol.Optional(CONF_DEADBAND, default=opts[CONF_DEADBAND]): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0.1,
+                    max=2.0,
+                    step=0.1,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="°C"
+                )
+            ),
+            vol.Optional(CONF_MIN_RUN_SECONDS, default=opts[CONF_MIN_RUN_SECONDS]): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=3600,
+                    step=10,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="s"
+                )
+            ),
+            vol.Optional(CONF_MIN_IDLE_SECONDS, default=opts[CONF_MIN_IDLE_SECONDS]): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=3600,
+                    step=10,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="s"
+                )
+            ),
+            vol.Optional(CONF_WINDOW_MODE, default=opts[CONF_WINDOW_MODE]): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(label="Ausschalten", value="off"),
+                        selector.SelectOptionDict(label="Frostschutz", value="frost")
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN
+                )
+            ),
+            vol.Optional(CONF_FROST_TEMP, default=opts[CONF_FROST_TEMP]): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=3.0,
+                    max=12.0,
+                    step=0.5,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="°C"
+                )
+            ),
+            vol.Optional(CONF_SMOOTHING_ALPHA, default=opts[CONF_SMOOTHING_ALPHA]): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0.0,
+                    max=1.0,
+                    step=0.05,
+                    mode=selector.NumberSelectorMode.SLIDER
+                )
+            ),
         })
 
         return self.async_show_form(step_id="init", data_schema=schema)
